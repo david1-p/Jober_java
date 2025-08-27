@@ -1,0 +1,17 @@
+# 핵심 AI 패키지
+google-generativeai==0.8.3
+faiss-cpu==1.9.0
+
+# 데이터 처리
+numpy==2.2.1
+pandas==2.2.3
+python-dotenv==1.0.1
+
+# 문서 로딩 및 처리 (LangChain)
+langchain==0.3.27
+langchain-core==0.3.74
+langchain-community==0.3.27
+langchain-text-splitters==0.3.9
+
+# 기타
+torch>=2.0.0
