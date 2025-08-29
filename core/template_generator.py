@@ -1,4 +1,5 @@
 import re
+from datetime import date, timedelta
 from typing import Dict, List, Tuple
 from .base_processor import BaseTemplateProcessor
 
@@ -8,6 +9,34 @@ class TemplateGenerator(BaseTemplateProcessor):
 
     def __init__(self, api_key: str, gemini_model: str = "gemini-2.0-flash-exp"):
         super().__init__(api_key, gemini_model)
+    
+    def preprocess_query(self, query: str) -> str:
+        """
+        '내일', '글피', 'N일 뒤'와 같은 시간 표현을 실제 날짜와 요일로 변환합니다.
+        """
+        today = date.today()
+
+        # '내일'과 '글피' 처리
+        if '내일' in query:
+            tomorrow = today + timedelta(days=1)
+            day_of_week = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"][tomorrow.weekday()]
+            query = query.replace('내일', tomorrow.strftime('%Y년 %m월 %d일') + f'({day_of_week})')
+        if '글피' in query:
+            day_after_tomorrow = today + timedelta(days=2)
+            day_of_week = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"][day_after_tomorrow.weekday()]
+            query = query.replace('글피', day_after_tomorrow.strftime('%Y년 %m월 %d일') + f'({day_of_week})')
+
+        # 'N일 뒤' 패턴 처리
+        match = re.search(r'(\d+)\s*일\s*뒤', query)
+        if match:
+            days_to_add = int(match.group(1))
+            future_date = today + timedelta(days=days_to_add)
+            day_of_week = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"][future_date.weekday()]
+
+            # 'N일 뒤'를 'YYYY년 MM월 DD일 (요일)' 형식으로 대체
+            query = re.sub(r'(\d+)\s*일\s*뒤', future_date.strftime('%Y년 %m월 %d일') + f'({day_of_week})', query)
+
+        return query
 
     def generate_template(
         self,
@@ -17,15 +46,19 @@ class TemplateGenerator(BaseTemplateProcessor):
         guidelines: List[str] = None,
     ) -> Tuple[str, str]:
         """템플릿 생성"""
+        
+        # 1. 날짜 전처리 수행
+        processed_input = self.preprocess_query(user_input)
+        print(f"🔄 날짜 전처리: '{user_input}' → '{processed_input}'")
 
-        # 기본 템플릿 생성
+        # 2. 기본 템플릿 생성 (전처리된 입력 사용)
         if guidelines:
             template = self._generate_guideline_based_template(
-                user_input, entities, similar_templates, guidelines
+                processed_input, entities, similar_templates, guidelines
             )
         else:
             template = self._generate_basic_template(
-                user_input, entities, similar_templates
+                processed_input, entities, similar_templates
             )
 
         # 실제 값으로 채워진 미리보기 생성
@@ -110,7 +143,14 @@ class TemplateGenerator(BaseTemplateProcessor):
         urgency = entities.get("urgency_level", "보통")
 
         base_prompt = f"""
-사용자 입력: "{user_input}"
+아래 문서는 카카오 알림톡 및 관련 비즈니스 메시지 가이드의 예시들입니다.
+사용자의 요청에 따라 이 문서의 형식과 내용을 참고하여 창의적이고 새로운 메시지 템플릿을 만들어 주세요.
+
+**중요 지침:**
+1. 사용자 요청에 포함된 날짜는 이미 정확하게 계산되어 있습니다. 템플릿에 날짜와 요일을 포함시킬 때, 반드시 제공된 날짜와 요일 정보를 정확히 사용하세요.
+2. 답변은 1000자 이내로 작성해 주세요.
+3. 문서에 직접적인 내용이 없더라도, 문서의 톤과 스타일을 바탕으로 답변을 완성하세요.
+4. 카카오 알림톡의 형식과 규정에 맞는 템플릿을 작성해주세요.
 
 추출된 정보:
 - 날짜: {', '.join(extracted_info.get('dates', [])) if extracted_info.get('dates') else '없음'}
@@ -126,13 +166,23 @@ class TemplateGenerator(BaseTemplateProcessor):
 """
 
         if use_guidelines and guidelines:
-            base_prompt += f"\n관련 알림톡 가이드라인:\n{guidelines}\n"
+            base_prompt += f"""
+---
+참고 문서 내용:
+{guidelines}
+---
+"""
 
         if template_examples:
-            base_prompt += f"\n참고 템플릿:\n{template_examples}\n"
+            base_prompt += f"""
+참고 템플릿 예시:
+{template_examples}
+"""
 
-        base_prompt += """
-위 정보를 바탕으로 완성도 높은 알림톡 템플릿을 생성해주세요.
+        base_prompt += f"""
+사용자 요청: {user_input}
+
+위 요청에 맞는 알림톡 메시지 템플릿을 작성해주세요.
 
 필수 준수사항:
 1. 정보통신망법 준수 (정보성 메시지 기준)

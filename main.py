@@ -29,16 +29,53 @@ class TemplateSystem:
         ]
 
     def _load_guidelines(self) -> list:
-        """가이드라인 로드 - 통합된 데이터 프로세서 사용"""
+        """predata 폴더의 모든 파일 로드 및 임베딩"""
+        all_chunks = []
+        predata_dir = Path("predata")
+        
+        if not predata_dir.exists():
+            print("❌ predata 폴더가 존재하지 않습니다.")
+            return []
+        
         try:
-            # 파일이 없으면 자동 생성
-            if not Path("data/cleaned_alrimtalk.md").exists():
-                print("📋 cleaned_alrimtalk.md 파일이 없습니다. 자동 생성 중...")
-                if Path("data/alrimtalk.md").exists():
-                    self.data_processor.clean_markdown("alrimtalk.md")
-
-            content = self.data_processor.load_markdown("cleaned_alrimtalk.md")
-            return self.entity_extractor.chunk_text(content, 800, 100)
+            # predata 폴더의 모든 파일 목록
+            predata_files = [
+                "cleaned_add_infotalk.md",
+                "cleaned_alrimtalk.md", 
+                "cleaned_black_list.md",
+                "cleaned_content-guide.md",
+                "cleaned_info_simsa.md",
+                "cleaned_message.md",
+                "cleaned_message_yuisahang.md",
+                "cleaned_run_message.md",
+                "cleaned_white_list.md",
+                "cleaned_zipguide.md",
+                "pdf_extraction_results.txt"
+            ]
+            
+            print(f"📁 predata 폴더에서 {len(predata_files)}개 파일 로딩 중...")
+            
+            for filename in predata_files:
+                file_path = predata_dir / filename
+                if file_path.exists():
+                    try:
+                        # 파일 내용 로드
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        
+                        # 청킹
+                        chunks = self.entity_extractor.chunk_text(content, 800, 100)
+                        all_chunks.extend(chunks)
+                        print(f"✅ {filename}: {len(chunks)}개 청크 생성")
+                        
+                    except Exception as e:
+                        print(f"⚠️ {filename} 로드 실패: {e}")
+                else:
+                    print(f"⚠️ {filename} 파일이 존재하지 않습니다.")
+            
+            print(f"🔄 총 {len(all_chunks)}개 청크를 predata에서 로드 완료")
+            return all_chunks
+            
         except Exception as e:
             print(f"가이드라인 로드 오류: {e}")
             return []
@@ -136,6 +173,7 @@ def main():
 
         if user_input:
             try:
+                print(f"\n💬 사용자 입력: '{user_input}'")
                 print("\n🔄 템플릿 생성 중...")
                 result = system.generate_template(user_input)
 
